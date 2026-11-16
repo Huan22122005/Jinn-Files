@@ -17,14 +17,25 @@ jobs:
       - name: Build
         working-directory: ${{ env.WORKDIR }}
         run: |
-          xcodegen generate
+          set -o pipefail
+          xcodegen generate 2>&1 | tee build.log
           xcodebuild -project JinnFiles.xcodeproj -scheme JinnFiles -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee -a build.log
           mkdir Payload
           cp -R build/Build/Products/Release-iphoneos/JinnFiles.app Payload/
           zip -qr JinnFiles.ipa Payload
           ls -la JinnFiles.ipa
+      - name: Hien thi loi bien dich
+        if: failure()
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          {
+            echo '### Loi bien dich (chup man hinh phan nay gui cho Claude)'
+            echo '```'
+            if [ -f build.log ]; then grep -E "error:|Fatal error|FAILED" build.log | sort -u | head -40; else echo "Khong co build.log"; fi
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
       - name: Dang IPA len Releases
         working-directory: ${{ env.WORKDIR }}
         env:
