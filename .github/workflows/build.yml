@@ -22,16 +22,38 @@ jobs:
           xcodebuild -project JinnFiles.xcodeproj -scheme JinnFiles -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee -a build.log
+      - name: Dong goi IPA (ten tep gom so phien ban)
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          VERSION=$(grep -m1 'MARKETING_VERSION' project.yml | sed -E 's/.*"([^"]+)".*/\1/')
+          IPA="JinnFiles${VERSION}.ipa"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "IPA=$IPA" >> $GITHUB_ENV
+          rm -rf Payload JinnFiles*.ipa
           mkdir Payload
           cp -R build/Build/Products/Release-iphoneos/JinnFiles.app Payload/
-          zip -qr JinnFiles.ipa Payload
-          ls -la JinnFiles.ipa
+          find Payload -name ".DS_Store" -delete
+          ditto -c -k --keepParent Payload "$IPA"
+          ls -la "$IPA"
+      - name: Kiem tra IPA
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          unzip -tq "$IPA"
+          {
+            echo "### Thong tin IPA: $IPA (chup man hinh phan nay neu ky bi loi)"
+            echo '```'
+            ls -la "$IPA"
+            shasum -a 256 "$IPA"
+            unzip -l "$IPA" | head -12
+            plutil -p Payload/JinnFiles.app/Info.plist | head -45
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
       - name: Hien thi loi bien dich
         if: failure()
         working-directory: ${{ env.WORKDIR }}
         run: |
           {
-            echo '### Loi bien dich (chup man hinh phan nay gui cho Claude)'
+            echo '### Loi (chup man hinh phan nay gui cho Claude)'
             echo '```'
             if [ -f build.log ]; then grep -E "error:|Fatal error|FAILED" build.log | sort -u | head -40; else echo "Khong co build.log"; fi
             echo '```'
@@ -41,10 +63,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "build-${{ github.run_number }}" JinnFiles.ipa \
-            --title "Jinn Files build ${{ github.run_number }}" \
+          gh release create "v${VERSION}-build${{ github.run_number }}" "$IPA" \
+            --title "Jinn Files ${VERSION} (build ${{ github.run_number }})" \
             --notes "IPA chua ky, cai bang cong cu sideload"
       - uses: actions/upload-artifact@v4
         with:
-          name: JinnFiles-ipa
-          path: ${{ env.WORKDIR }}/JinnFiles.ipa
+          name: JinnFiles${{ env.VERSION }}-ipa
+          path: ${{ env.WORKDIR }}/${{ env.IPA }}
