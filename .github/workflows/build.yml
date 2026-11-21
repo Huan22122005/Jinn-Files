@@ -2,16 +2,6 @@ name: Build IPA
 
 on:
   workflow_dispatch:
-    inputs:
-      bump:
-        description: "Loại cập nhật phiên bản"
-        required: true
-        default: "nho (3.3 -> 3.3.1 -> 3.3.2)"
-        type: choice
-        options:
-          - "nho (3.3 -> 3.3.1 -> 3.3.2)"
-          - "lon (3.3.x -> 3.4 -> 3.5)"
-          - "giu-nguyen"
 
 permissions:
   contents: write
@@ -27,59 +17,6 @@ jobs:
           if [ -f JinnFiles.zip ]; then unzip -q -o JinnFiles.zip; fi
           cd JinnFiles 2>/dev/null || true
           echo "WORKDIR=$(pwd)" >> $GITHUB_ENV
-
-      - name: Tu dong cap nhat phien ban
-        working-directory: ${{ env.WORKDIR }}
-        env:
-          BUMP_TYPE: ${{ inputs.bump }}
-        run: |
-          python3 - << 'EOF'
-          import os, re
-
-          bump = os.environ.get("BUMP_TYPE", "giu-nguyen")
-          with open("project.yml", "r", encoding="utf-8") as f:
-              text = f.read()
-
-          ver_match = re.search(r'MARKETING_VERSION:\s*"([^"]+)"', text)
-          bld_match = re.search(r'CURRENT_PROJECT_VERSION:\s*"([^"]+)"', text)
-          cur_ver = ver_match.group(1) if ver_match else "3.3"
-          cur_bld = int(bld_match.group(1)) if bld_match else 1
-
-          parts = [int(x) for x in cur_ver.split(".")]
-          while len(parts) < 2:
-              parts.append(0)
-
-          if bump.startswith("nho"):
-              if len(parts) == 2:
-                  new_ver = f"{parts[0]}.{parts[1]}.1"
-              else:
-                  new_ver = f"{parts[0]}.{parts[1]}.{parts[2] + 1}"
-              new_bld = cur_bld + 1
-          elif bump.startswith("lon"):
-              new_ver = f"{parts[0]}.{parts[1] + 1}"
-              new_bld = cur_bld + 1
-          else:
-              new_ver = cur_ver
-              new_bld = cur_bld
-
-          if new_ver != cur_ver or new_bld != cur_bld:
-              text = re.sub(r'(MARKETING_VERSION:\s*)"[^"]+"', rf'\1"{new_ver}"', text, count=1)
-              text = re.sub(r'(CURRENT_PROJECT_VERSION:\s*)"[^"]+"', rf'\1"{new_bld}"', text, count=1)
-              with open("project.yml", "w", encoding="utf-8") as f:
-                  f.write(text)
-
-          print(f"Version: {cur_ver} -> {new_ver} (build {new_bld})")
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as envf:
-              envf.write(f"NEW_VERSION={new_ver}\n")
-              envf.write(f"NEW_BUILD={new_bld}\n")
-          EOF
-
-          if [[ "$BUMP_TYPE" != "giu-nguyen" ]] && git ls-files --error-unmatch project.yml >/dev/null 2>&1; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add project.yml
-            git diff --cached --quiet || (git commit -m "Bump version to ${NEW_VERSION} (build ${NEW_BUILD})" && git push)
-          fi
 
       - name: Cai xcodegen
         run: brew install xcodegen
